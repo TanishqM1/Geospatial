@@ -54,9 +54,12 @@ data/
 osrm-data/
 
 # IDE
-.vscode/
+/.vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+.vscode/c_cpp_properties.json
+.gitignore
+.vscode/tasks.json
