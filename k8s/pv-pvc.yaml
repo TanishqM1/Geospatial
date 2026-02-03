@@ -1,0 +1,28 @@
+# PersistentVolume backed by hostPath (minikube)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: osrm-data-pv
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/geospatial-data"
+---
+# PersistentVolumeClaim for OSRM data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: osrm-data-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
