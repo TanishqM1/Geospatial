@@ -213,6 +213,215 @@ This means:
 
 ---
 
+## 🔌 Understanding the Service and Port-Forward
+
+### The Port Mapping Chain
+
+Here's the complete flow from your computer to the Flask container:
+
+```
+Your Computer                Kubernetes Cluster              Pod
+─────────────                ──────────────────              ───
+
+localhost:8080  ────┐
+                    │
+              port-forward
+                    │
+                    └──────► Service (port 80) ────► Flask Container (port 8080)
+```
+
+### Detailed Breakdown
+
+#### 1. Flask Container (Inside Pod)
+```python
+# app.py
+app.run(host="0.0.0.0", port=8080)
+```
+- Flask listens on **0.0.0.0:8080** inside the container
+- This means "accept connections on port 8080 from any interface"
+- The Pod has an IP address (e.g., 10.244.0.3)
+- So Flask is accessible at `10.244.0.3:8080` from within the cluster
+
+#### 2. Service (Kubernetes Abstraction)
+```yaml
+# k8s/service.yaml
+spec:
+  type: NodePort
+  ports:
+    - port: 80           # Service exposes port 80
+      targetPort: 8080   # Routes to Pod port 8080
+```
+
+**What the Service does:**
+- Creates a stable endpoint called `geospatial` (DNS name)
+- Exposes port **80** externally
+- Routes traffic to port **8080** on matching Pods
+- Acts like a load balancer if multiple Pods exist
+
+**So the mapping is:**
+```
+Service:80 → Pod:8080
+```
+
+**Within the cluster**, other Pods could call:
+```bash
+curl http://geospatial:80/matrix
+# Service routes this to Pod port 8080
+```
+
+#### 3. kubectl port-forward (Your Local Access)
+```bash
+kubectl port-forward svc/geospatial 8080:80
+```
+
+**What this command means:**
+- `8080` = **Your localhost port** (left side)
+- `80` = **Service port** (right side)
+- `svc/geospatial` = Target the Service named "geospatial"
+
+**So the complete chain is:**
+```
+localhost:8080 → Service:80 → Pod:8080
+   (your PC)      (k8s)         (container)
+```
+
+### Why Three Different Port References?
+
+| Port | Where | What |
+|------|-------|------|
+| `8080` | Flask container | Flask app listens here |
+| `80` | Service | Service exposes this to the cluster |
+| `8080` | Your localhost | kubectl forwards your local port here |
+
+**It's confusing because:**
+- Your localhost uses 8080
+- The Service uses 80
+- The container also uses 8080
+- **They're different network contexts!**
+
+### Visual Port Mapping
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Your Computer (Windows/Mac)                                 │
+│                                                              │
+│  test_matrix.py sends to: http://localhost:8080/matrix      │
+│                                    │                         │
+│                                    ▼                         │
+│              kubectl port-forward (8080 → 80)               │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               │ Network tunnel
+                               │
+┌──────────────────────────────▼──────────────────────────────┐
+│ Kubernetes Cluster (Minikube)                               │
+│                                                              │
+│  ┌────────────────────────────────────────────────┐         │
+│  │ Service: geospatial                            │         │
+│  │                                                │         │
+│  │  - Listening on: port 80                      │         │
+│  │  - Routing to: targetPort 8080                │         │
+│  │  - Selects Pods with: app=geospatial          │         │
+│  └─────────────────────┬──────────────────────────┘         │
+│                        │                                    │
+│                        │ Internal cluster routing           │
+│                        ▼                                    │
+│  ┌────────────────────────────────────────────────┐         │
+│  │ Pod: geospatial-xxxx                           │         │
+│  │ IP: 10.244.0.3 (cluster internal)             │         │
+│  │                                                │         │
+│  │  ┌──────────────────────────────────────┐     │         │
+│  │  │ Flask Container                      │     │         │
+│  │  │                                      │     │         │
+│  │  │  Listening on: 0.0.0.0:8080         │     │         │
+│  │  │  (accepts from any Pod interface)   │     │         │
+│  │  │                                      │     │         │
+│  │  │  Accessible at:                     │     │         │
+│  │  │  - localhost:8080 (from Pod)        │     │         │
+│  │  │  - 10.244.0.3:8080 (from cluster)   │     │         │
+│  │  └──────────────────────────────────────┘     │         │
+│  └────────────────────────────────────────────────┘         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Is Port 8080 "Just Available for Requests"?
+
+**Yes and No** - it depends on the context:
+
+#### Inside the Pod:
+✅ **YES** - Flask container port 8080 is directly accessible:
+- From OSRM container: `curl http://localhost:8080/matrix`
+- From Flask itself: `http://127.0.0.1:8080`
+
+#### From within the Kubernetes cluster:
+✅ **YES** - Other Pods can reach it via the Pod IP:
+- Direct: `curl http://10.244.0.3:8080/matrix`
+- Via Service: `curl http://geospatial:80/matrix` (routes to 8080)
+
+#### From outside the cluster (your computer):
+❌ **NO** - Pod port 8080 is NOT directly accessible
+- Pod IPs (10.244.x.x) are cluster-internal only
+- You MUST use:
+  - `kubectl port-forward` (development)
+  - NodePort Service (exposes on host machine port)
+  - LoadBalancer Service (cloud provider gives external IP)
+  - Ingress Controller (HTTP/HTTPS routing)
+
+### Alternative: Direct NodePort Access
+
+If you wanted to access without port-forward, NodePort makes it available on the Node:
+
+```yaml
+# service.yaml with NodePort
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 8080
+      nodePort: 30080  # Exposes on host port 30080
+```
+
+Then you could access via:
+```bash
+# Get the minikube IP
+minikube ip  # Returns something like 192.168.49.2
+
+# Access directly
+curl http://192.168.49.2:30080/matrix
+
+# Or use minikube helper
+minikube service geospatial --url
+```
+
+**But we use port-forward because:**
+- More convenient for development (uses localhost)
+- No need to remember Node IPs or NodePort ranges
+- Works the same on any Kubernetes cluster
+- Doesn't require changing the Service to use specific NodePort
+
+### Summary: The Service's Job
+
+The Kubernetes Service:
+1. **Provides a stable endpoint** - Pods come and go, Service stays
+2. **Does port translation** - Service port → Pod port (80 → 8080)
+3. **Load balances** - If multiple Pods, distributes traffic
+4. **Service discovery** - Creates DNS name (`geospatial`)
+5. **Abstracts Pod IPs** - You don't need to know Pod IPs
+
+**Without the Service:**
+- You'd need to track Pod IPs manually
+- No automatic load balancing
+- No DNS name
+- Need to handle Pod restarts/replacements
+
+**With the Service:**
+- One stable name: `geospatial`
+- Automatic routing to healthy Pods
+- Built-in load balancing
+- Port abstraction (expose 80, target 8080)
+
+---
+
 ## 🌐 Where They Run in Production
 
 ### Current Setup (Development)
