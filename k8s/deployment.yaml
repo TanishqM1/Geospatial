@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: geospatial
+  labels:
+    app: geospatial
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: geospatial
+  template:
+    metadata:
+      labels:
+        app: geospatial
+    spec:
+      volumes:
+        - name: osrm-data
+          persistentVolumeClaim:
+            claimName: osrm-data-pvc
+      
+      containers:
+        # OSRM container
+        - name: osrm
+          image: osrm/osrm-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: 
+            - osrm-routed
+            - --algorithm
+            - mld
+            - /data/british-columbia-251029.osrm
+          ports:
+            - name: osrm
+              containerPort: 5000
+              protocol: TCP
+          volumeMounts:
+            - name: osrm-data
+              mountPath: /data
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+
+        # Flask container (communicates with OSRM via localhost)
+        - name: flask
+          image: geospatial-flask:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OSRM_URL
+              value: "http://127.0.0.1:5000"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: osrm-data
+              mountPath: /data
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /matrix
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"

@@ -36,6 +36,10 @@ WORKDIR /app
 COPY app.py requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy a simple startup script that launches OSRM then the Flask app
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 # --- Expose ports ---
 EXPOSE 8080 5000
 VOLUME ["/data"]
@@ -44,4 +48,4 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD curl -fs http://localhost:8080/ || curl -fs http://localhost:5000/ || exit 1
 
 # --- Start OSRM + Flask ---
-CMD ["bash", "-c", "osrm-routed --algorithm mld /data/british-columbia-251029.osrm & python app.py"]
+CMD ["bash", "/app/start.sh"]

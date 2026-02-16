@@ -1,7 +1,11 @@
 from flask import Flask, request, jsonify
 import requests
+import os
 
 app = Flask(__name__)
+
+# Read OSRM URL from environment (default to localhost for backward compatibility)
+OSRM_BASE_URL = os.getenv("OSRM_URL", "http://localhost:5000")
 
 @app.route("/matrix", methods=["POST"])
 def matrix():
@@ -11,7 +15,7 @@ def matrix():
         return jsonify({"error": "no coordinates"}), 400
 
     coord_str = ";".join([f"{c[0]},{c[1]}" for c in coords])
-    url = f"http://localhost:5000/table/v1/driving/{coord_str}?annotations=distance,duration"
+    url = f"{OSRM_BASE_URL}/table/v1/driving/{coord_str}?annotations=distance,duration"
     r = requests.get(url)
     osrm_data = r.json()
 
