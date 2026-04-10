@@ -20,11 +20,10 @@ $DataDir = ".\data"
 $Port = 8080
 
 # Check Docker is running
-try {
-    docker info > $null 2>&1
-    if ($LASTEXITCODE -ne 0) { throw }
-} catch {
+$dockerCheck = docker ps 2>&1
+if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Docker is not running. Please start Docker Desktop first." -ForegroundColor Red
+    Write-Host "Details: $dockerCheck" -ForegroundColor Gray
     exit 1
 }
 
