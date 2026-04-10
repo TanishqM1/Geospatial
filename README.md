@@ -1,6 +1,6 @@
 # Geospatial Routing API
 
-A **free, self-hosted** geospatial routing service for computing distances, travel times, directions, and route optimization. Built as a lightweight alternative to paid services like Google Maps API or Mapbox for local development and testing.
+A **free, self-hosted** geospatial routing service for computing distances, travel times, and directions. Built as a lightweight alternative to paid services like Google Maps API or Mapbox for local development and testing.
 
 ## Tech Stack
 
@@ -15,7 +15,6 @@ A **free, self-hosted** geospatial routing service for computing distances, trav
 | `/nearest` | Find the nearest road to a coordinate |
 | `/route` | Get turn-by-turn driving directions |
 | `/matrix` | Distance/duration matrix between multiple points |
-| `/trip` | Traveling Salesman Problem solver (optimal visit order) |
 | `/match` | Snap GPS traces to roads (map matching) |
 | `/health` | Health check for container orchestration |
 
@@ -36,7 +35,7 @@ docker build -t geospatial:latest .
 docker run -d -p 8080:8080 -v /path/to/data:/data geospatial:latest
 
 # Test
-curl -X POST http://localhost:8080/health
+curl http://localhost:8080/health
 ```
 
 ---
@@ -190,58 +189,36 @@ curl -X POST http://localhost:8080/matrix \
 
 ---
 
-### 4. Trip
+### 4. Match (Map Matching)
 
-Solve the Traveling Salesman Problem - find the optimal order to visit all points.
+Snap a GPS trace to the road network. This is useful when you have raw GPS data that's slightly inaccurate and you want to:
 
-**Request:**
-```bash
-curl -X POST http://localhost:8080/trip \
-  -H "Content-Type: application/json" \
-  -d '{
-    "coordinates": [
-      [-123.1207, 49.2827],
-      [-123.1162, 49.2463],
-      [-122.8490, 49.1913],
-      [-122.9820, 49.2488]
-    ],
-    "roundtrip": true,
-    "geometries": "geojson"
-  }'
+1. **Clean up noisy GPS data** - GPS is typically accurate to 5-15 meters, which can place points off the actual road
+2. **Determine which roads were traveled** - Get street names and actual route taken
+3. **Calculate true distance traveled** - Road distance, not straight-line distance between GPS points
+4. **Reconstruct a route from sparse GPS points** - Fill in the gaps between logged positions
+
+#### When to use `/match`
+
+| Scenario | Example |
+|----------|---------|
+| Fleet tracking | A delivery truck logs GPS every 30 seconds. You want to know exactly which streets it drove on. |
+| Fitness apps | A runner's GPS watch recorded a route. You want to snap it to actual trails/roads for accurate distance. |
+| Data cleaning | You have historical GPS logs with some points in buildings or lakes due to GPS drift. |
+| Route reconstruction | A vehicle logged sparse GPS points. You want the complete route with all turns. |
+
+#### How it works
+
 ```
+Raw GPS points (noisy):          Matched result (on road):
 
-**Response:**
-```json
-{
-  "trips": [
-    {
-      "distance": 65432,
-      "duration": 4521,
-      "geometry": { "type": "LineString", "coordinates": [...] }
-    }
-  ],
-  "waypoints": [
-    { "name": "West Georgia Street", "location": [-123.1207, 49.2827], "waypoint_index": 0 },
-    { "name": "4th Avenue", "location": [-123.1162, 49.2463], "waypoint_index": 1 },
-    { "name": "Metrotown", "location": [-122.9820, 49.2488], "waypoint_index": 2 },
-    { "name": "King George Boulevard", "location": [-122.8490, 49.1913], "waypoint_index": 3 }
-  ]
-}
+    •
+      •   •                           ═══════•═══════
+  •     •                                    │
+    •                                        •
+      •                                      │
+                                       ══════•══════
 ```
-
-| Field | Description |
-|-------|-------------|
-| `coordinates` | Array of `[lon, lat]` points to visit |
-| `roundtrip` | (optional) Return to starting point, default `true` |
-| `geometries` | (optional) `"polyline"`, `"polyline6"`, or `"geojson"` |
-
-**Key output:** `waypoint_index` shows the optimal visit order.
-
----
-
-### 5. Match
-
-Snap a GPS trace to the road network (map matching). Useful for cleaning up noisy GPS data.
 
 **Request:**
 ```bash
@@ -281,18 +258,61 @@ curl -X POST http://localhost:8080/match \
 
 | Field | Description |
 |-------|-------------|
-| `coordinates` | Array of `[lon, lat]` GPS points |
-| `timestamps` | (optional) Unix timestamps for each point |
-| `radiuses` | (optional) GPS accuracy in meters for each point |
+| `coordinates` | Array of `[lon, lat]` GPS points (in order they were recorded) |
+| `timestamps` | (optional) Unix timestamps for each point - helps with accuracy |
+| `radiuses` | (optional) GPS accuracy in meters for each point (default: 5m). Use higher values for less accurate GPS. |
 | `geometries` | (optional) `"polyline"`, `"polyline6"`, or `"geojson"` |
 
-**Key output:** `confidence` (0-1) indicates how well the trace matched the road network.
+**Output explained:**
+- `confidence` (0-1): How well the GPS trace matched roads. Below 0.5 suggests the trace may not be on roads.
+- `distance`: Actual road distance traveled (meters)
+- `duration`: Estimated travel time (seconds)
+- `geometry`: The snapped route as a line on actual roads
+- `tracepoints`: Each input point snapped to its nearest road location, with street name
+
+#### Python example
+
+```python
+import requests
+
+# Raw GPS trace from a vehicle
+gps_trace = [
+    [-123.1207, 49.2827],  # Slightly off road
+    [-123.1200, 49.2830],  # Slightly off road
+    [-123.1195, 49.2835],  # Slightly off road
+    [-123.1188, 49.2840],  # Slightly off road
+]
+
+response = requests.post("http://localhost:8080/match", json={
+    "coordinates": gps_trace,
+    "radiuses": [15] * len(gps_trace),  # GPS accurate to ~15 meters
+    "geometries": "geojson"
+})
+
+data = response.json()
+
+# Check match quality
+confidence = data["matchings"][0]["confidence"]
+print(f"Match confidence: {confidence:.0%}")
+
+# Get actual distance traveled
+distance_km = data["matchings"][0]["distance"] / 1000
+print(f"Distance traveled: {distance_km:.2f} km")
+
+# Get street names
+streets = set(tp["name"] for tp in data["tracepoints"] if tp)
+print(f"Streets traveled: {', '.join(streets)}")
+
+# Get corrected coordinates
+corrected = [tp["location"] for tp in data["tracepoints"] if tp]
+print(f"Corrected coordinates: {corrected}")
+```
 
 ---
 
-### 6. Health
+### 5. Health
 
-Simple health check endpoint.
+Simple health check endpoint for container orchestration (Kubernetes liveness probes).
 
 **Request:**
 ```bash
@@ -383,19 +403,17 @@ print("Distance matrix (km):")
 for row in data["distance_matrix"]:
     print([round(d/1000, 2) for d in row])
 
-# Get optimal route order
-response = requests.post(f"{API_URL}/trip", json={
+# Get driving directions
+response = requests.post(f"{API_URL}/route", json={
     "coordinates": [
         [-123.1207, 49.2827],
-        [-123.1162, 49.2463],
-        [-122.8490, 49.1913],
-        [-122.9820, 49.2488]
-    ]
+        [-122.8490, 49.1913]
+    ],
+    "steps": True
 })
 data = response.json()
-print("\nOptimal visit order:")
-for wp in sorted(data["waypoints"], key=lambda x: x["waypoint_index"]):
-    print(f"  {wp['waypoint_index']}: {wp['name']}")
+route = data["routes"][0]
+print(f"\nRoute: {route['distance']/1000:.1f} km, {route['duration']/60:.0f} min")
 ```
 
 ---
