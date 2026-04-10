@@ -22,44 +22,22 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-.venv
+.venv/
 venv/
 ENV/
 env/
-.vscode/
 *.pyc
-
-# C++
-*.o
-*.a
-*.so
-*.dylib
-*.dll
-*.exe
-*.out
-*.app
-build/
-CMakeFiles/
-cmake_install.cmake
-CMakeCache.txt
-Makefile
-.cmake/
-*.cmake
-*.vcxproj
-*.vcxproj.filters
-*.sln
 
 # Project-specific
 data/
 osrm-data/
 
 # IDE
-/.vscode/
+.vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# OS
 .DS_Store
-.vscode/c_cpp_properties.json
-.gitignore
-.vscode/tasks.json
