@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OSRM_DB="/data/british-columbia-251029.osrm"
+# Auto-detect OSRM database file
+OSRM_DB=$(find /data -maxdepth 1 -name "*.osrm" -type f | head -1)
 
-# Start osrm-routed in background
-if [ ! -f "$OSRM_DB" ]; then
-  echo "ERROR: OSRM data not found at $OSRM_DB"
+if [ -z "$OSRM_DB" ]; then
+  echo "ERROR: No .osrm file found in /data"
   echo "Place your .osrm files (and partition/customize artifacts) under /data"
   exit 1
 fi
+
+echo "Found OSRM database: $OSRM_DB"
 
 echo "Starting osrm-routed --algorithm mld $OSRM_DB"
 osrm-routed --algorithm mld "$OSRM_DB" &

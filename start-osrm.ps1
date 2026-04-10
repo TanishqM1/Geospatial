@@ -62,7 +62,7 @@ if ($exists) {
 # Build image
 Write-Host ""
 Write-Host "[1/2] Building Docker image..." -ForegroundColor Yellow
-docker build -t $ImageName -f Dockerfile .
+docker build -t $ImageName -f backend/Dockerfile backend/
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to build Docker image" -ForegroundColor Red
     exit 1

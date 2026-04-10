@@ -56,7 +56,7 @@ fi
 # Build image if needed
 echo ""
 echo "[1/2] Building Docker image..."
-docker build -t "$IMAGE_NAME" -f Dockerfile .
+docker build -t "$IMAGE_NAME" -f backend/Dockerfile backend/
 
 # Run container
 echo ""
