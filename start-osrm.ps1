@@ -1,9 +1,7 @@
 # =============================================================================
 #   Geospatial OSRM Startup Script (Windows)
 #
-#   This script starts the entire geospatial routing service using Docker.
 #   Prerequisites: Docker Desktop installed and running
-#
 #   Usage: .\start-osrm.ps1
 # =============================================================================
 
@@ -23,26 +21,24 @@ $Port = 8080
 $dockerCheck = docker ps 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Docker is not running. Please start Docker Desktop first." -ForegroundColor Red
-    Write-Host "Details: $dockerCheck" -ForegroundColor Gray
     exit 1
 }
 
 # Check data directory exists
 if (-not (Test-Path $DataDir)) {
     Write-Host "ERROR: Data directory not found at $DataDir" -ForegroundColor Red
-    Write-Host ""
     Write-Host "Please create a 'data' folder with OSRM files. See README.md for setup instructions."
     exit 1
 }
 
-# Check for .osrm files
-$OsrmFiles = Get-ChildItem -Path $DataDir -Filter "*.osrm" -ErrorAction SilentlyContinue
-if (-not $OsrmFiles) {
-    Write-Host "ERROR: No .osrm files found in $DataDir" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Please download and preprocess OSRM data. See README.md for instructions."
+# Check for any .osrm file
+$OsrmFile = Get-ChildItem -Path $DataDir -Filter "*.osrm" -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $OsrmFile) {
+    Write-Host "ERROR: No .osrm file found in $DataDir" -ForegroundColor Red
+    Write-Host "Please download and preprocess OSRM data. See README.md for setup instructions."
     exit 1
 }
+Write-Host "Found OSRM data: $($OsrmFile.Name)" -ForegroundColor Green
 
 # Stop existing container if running
 $running = docker ps -q -f "name=$ContainerName" 2>$null
@@ -71,11 +67,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "[2/2] Starting container..." -ForegroundColor Yellow
 $AbsoluteDataDir = (Resolve-Path $DataDir).Path
-docker run -d `
-    --name $ContainerName `
-    -p "${Port}:8080" `
-    -v "${AbsoluteDataDir}:/data:ro" `
-    $ImageName
+docker run -d --name $ContainerName -p "${Port}:8080" -v "${AbsoluteDataDir}:/data:ro" $ImageName
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Failed to start container" -ForegroundColor Red
@@ -85,7 +77,7 @@ if ($LASTEXITCODE -ne 0) {
 # Wait for service to be ready
 Write-Host ""
 Write-Host "Waiting for service to start..." -NoNewline
-$Retries = 30
+$Retries = 60
 for ($i = 1; $i -le $Retries; $i++) {
     try {
         $response = Invoke-WebRequest -Uri "http://localhost:$Port/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
@@ -99,22 +91,12 @@ for ($i = 1; $i -le $Retries; $i++) {
             Write-Host "  API:    http://localhost:$Port" -ForegroundColor Cyan
             Write-Host "  Health: http://localhost:$Port/health" -ForegroundColor Cyan
             Write-Host ""
-            Write-Host "  Test with:" -ForegroundColor Yellow
-            Write-Host "    Invoke-WebRequest -Uri 'http://localhost:$Port/nearest' ``"
-            Write-Host "      -Method POST -ContentType 'application/json' ``"
-            Write-Host "      -Body '{`"coordinate`": [-123.1207, 49.2827]}'"
-            Write-Host ""
-            Write-Host "  View logs:" -ForegroundColor Yellow
-            Write-Host "    docker logs -f $ContainerName"
-            Write-Host ""
-            Write-Host "  Stop:" -ForegroundColor Yellow
-            Write-Host "    docker stop $ContainerName"
+            Write-Host "  View logs:  docker logs -f $ContainerName" -ForegroundColor Gray
+            Write-Host "  Stop:       docker stop $ContainerName" -ForegroundColor Gray
             Write-Host ""
             exit 0
         }
-    } catch {
-        # Service not ready yet
-    }
+    } catch { }
     Start-Sleep -Seconds 1
     Write-Host "." -NoNewline
 }

@@ -4,7 +4,6 @@ set -euo pipefail
 # =============================================================================
 #   Geospatial OSRM Startup Script (Mac/Linux)
 #
-#   This script starts the entire geospatial routing service using Docker.
 #   Prerequisites: Docker installed and running
 # =============================================================================
 
@@ -12,7 +11,6 @@ echo "============================================"
 echo "  Geospatial Routing API - Starting..."
 echo "============================================"
 
-# Configuration
 CONTAINER_NAME="geospatial"
 IMAGE_NAME="geospatial:latest"
 DATA_DIR="./data"
@@ -27,19 +25,18 @@ fi
 # Check data directory exists
 if [ ! -d "$DATA_DIR" ]; then
     echo "ERROR: Data directory not found at $DATA_DIR"
-    echo ""
     echo "Please create a 'data' folder with OSRM files. See README.md for setup instructions."
     exit 1
 fi
 
-# Check for .osrm files
-OSRM_FILES=$(find "$DATA_DIR" -name "*.osrm" 2>/dev/null | head -1)
-if [ -z "$OSRM_FILES" ]; then
-    echo "ERROR: No .osrm files found in $DATA_DIR"
-    echo ""
-    echo "Please download and preprocess OSRM data. See README.md for instructions."
+# Check for any .osrm file
+OSRM_FILE=$(ls "$DATA_DIR"/*.osrm 2>/dev/null | head -1)
+if [ -z "$OSRM_FILE" ]; then
+    echo "ERROR: No .osrm file found in $DATA_DIR"
+    echo "Please download and preprocess OSRM data. See README.md for setup instructions."
     exit 1
 fi
+echo "Found OSRM data: $(basename "$OSRM_FILE")"
 
 # Stop existing container if running
 if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
@@ -53,7 +50,7 @@ if docker ps -aq -f name="$CONTAINER_NAME" | grep -q .; then
     docker rm "$CONTAINER_NAME" > /dev/null
 fi
 
-# Build image if needed
+# Build image
 echo ""
 echo "[1/2] Building Docker image..."
 docker build -t "$IMAGE_NAME" -f backend/Dockerfile backend/
@@ -70,7 +67,7 @@ docker run -d \
 # Wait for service to be ready
 echo ""
 echo "Waiting for service to start..."
-RETRIES=30
+RETRIES=60
 for i in $(seq 1 $RETRIES); do
     if curl -s "http://localhost:$PORT/health" > /dev/null 2>&1; then
         echo ""
@@ -81,16 +78,8 @@ for i in $(seq 1 $RETRIES); do
         echo "  API:    http://localhost:$PORT"
         echo "  Health: http://localhost:$PORT/health"
         echo ""
-        echo "  Test with:"
-        echo "    curl -X POST http://localhost:$PORT/nearest \\"
-        echo "      -H 'Content-Type: application/json' \\"
-        echo "      -d '{\"coordinate\": [-123.1207, 49.2827]}'"
-        echo ""
-        echo "  View logs:"
-        echo "    docker logs -f $CONTAINER_NAME"
-        echo ""
-        echo "  Stop:"
-        echo "    docker stop $CONTAINER_NAME"
+        echo "  View logs:  docker logs -f $CONTAINER_NAME"
+        echo "  Stop:       docker stop $CONTAINER_NAME"
         echo ""
         exit 0
     fi

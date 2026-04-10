@@ -1,16 +1,14 @@
-#!/bin/bash
-set -e
+#!/bin/sh
 
-# Auto-detect OSRM database file
-OSRM_DB=$(find /data -maxdepth 1 -name "*.osrm" -type f | head -1)
+# Find the .osrm file in /data
+OSRM_DB=$(ls /data/*.osrm 2>/dev/null | head -1)
 
 if [ -z "$OSRM_DB" ]; then
   echo "ERROR: No .osrm file found in /data"
-  echo "Place your .osrm files (and partition/customize artifacts) under /data"
   exit 1
 fi
 
-echo "Found OSRM database: $OSRM_DB"
+echo "Using OSRM database: $OSRM_DB"
 
 echo "Starting osrm-routed --algorithm mld $OSRM_DB"
 osrm-routed --algorithm mld "$OSRM_DB" &
