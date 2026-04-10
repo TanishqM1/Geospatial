@@ -6,7 +6,7 @@ A **free, self-hosted** geospatial routing service for computing distances, trav
 
 - **OSRM** (Open Source Routing Machine) - High-performance routing engine
 - **Flask** - Python API wrapper
-- **Docker** / **Kubernetes** - Containerized deployment
+- **Docker** - Containerized deployment
 
 ## Features
 
@@ -24,18 +24,31 @@ A **free, self-hosted** geospatial routing service for computing distances, trav
 
 ### Prerequisites
 
-- Docker installed
-- OSRM data files for your region (see [Data Setup](#data-setup))
+- Docker installed and running
+- OSRM data files in `./data/` folder (see [Data Setup](#data-setup))
 
-### Run with Docker
+### Start the Service
+
+**Mac/Linux:**
+```bash
+./start-osrm.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\start-osrm.ps1
+```
+
+The script will:
+1. Build the Docker image
+2. Start the container
+3. Wait for the service to be ready
+4. Print the API URL and test commands
+
+### Stop the Service
 
 ```bash
-# Build and run
-docker build -t geospatial:latest .
-docker run -d -p 8080:8080 -v /path/to/data:/data geospatial:latest
-
-# Test
-curl http://localhost:8080/health
+docker stop geospatial
 ```
 
 ---
@@ -312,7 +325,7 @@ print(f"Corrected coordinates: {corrected}")
 
 ### 5. Health
 
-Simple health check endpoint for container orchestration (Kubernetes liveness probes).
+Simple health check endpoint.
 
 **Request:**
 ```bash
@@ -342,6 +355,9 @@ wget https://download.geofabrik.de/north-america/canada/british-columbia-latest.
 ### 2. Preprocess with OSRM
 
 ```bash
+mkdir -p data
+cd data
+
 # Extract
 docker run -v $(pwd):/data osrm/osrm-backend osrm-extract -p /opt/car.lua /data/british-columbia-latest.osm.pbf
 
@@ -356,30 +372,7 @@ This creates ~30 `.osrm*` files in your data directory.
 
 ### 3. Update configuration
 
-Update the OSRM filename in:
-- `start.sh` (line 4)
-- `k8s/deployment.yaml` (line 31)
-
----
-
-## Deployment Options
-
-### Option 1: Single Docker Container
-
-```bash
-docker build -t geospatial:latest .
-docker run -d -p 8080:8080 -v /path/to/data:/data geospatial:latest
-```
-
-### Option 2: Kubernetes (Minikube)
-
-See [README-K8S.md](README-K8S.md) for full Kubernetes deployment instructions.
-
-```bash
-# Quick start
-./setup-k8s.ps1  # Windows
-./setup-k8s.sh   # Mac/Linux
-```
+Update the OSRM filename in `start.sh` (line 4) to match your data file.
 
 ---
 
@@ -429,6 +422,12 @@ print(f"\nRoute: {route['distance']/1000:.1f} km, {route['duration']/60:.0f} min
 | Customizable | No | Yes |
 
 **Best for:** Local development, testing, batch processing, privacy-sensitive applications, offline use.
+
+---
+
+## Advanced: Kubernetes Deployment
+
+For production-like deployment with Kubernetes, see [README-K8S.md](README-K8S.md).
 
 ---
 
