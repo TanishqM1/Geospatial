@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
 # Auto-detect OSRM database file
 OSRM_DB=$(find /data -maxdepth 1 -name "*.osrm" -type f | head -1)
