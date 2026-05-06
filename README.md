@@ -137,6 +137,25 @@ See [README-K8S.md](README-K8S.md).
 
 ---
 
+## Frontend (Web UI)
+
+A Next.js web interface for testing the API with interactive map visualization.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Features:
+- Dropdown to switch between `/nearest`, `/route`, `/matrix`, `/match`
+- Live health check indicator (polls every 30s)
+- Leaflet map to visualize results
+- JSON response viewer
+- Parameter documentation for each endpoint
+
+---
+
 ## API Reference
 
 All endpoints use `POST` with JSON body. Coordinates are `[longitude, latitude]`.
