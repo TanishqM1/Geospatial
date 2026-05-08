@@ -93,11 +93,15 @@ fi
 
 # Build and run
 log_info "Building backend Docker image..."
-docker build -t "$IMAGE_NAME" -f "$SCRIPT_DIR/backend/Dockerfile" "$SCRIPT_DIR/backend/" > /dev/null
+# Default to amd64 emulation on macOS Apple Silicon to match OSRM binaries.
+# You can override by setting PLATFORM env var before running this script.
+PLATFORM=${PLATFORM:-linux/amd64}
+docker build --platform "$PLATFORM" -t "$IMAGE_NAME" -f "$SCRIPT_DIR/backend/Dockerfile" "$SCRIPT_DIR/backend/" > /dev/null
 
 log_info "Starting backend container..."
 docker run -d \
     --name "$CONTAINER_NAME" \
+    --platform "$PLATFORM" \
     -p 8080:8080 \
     -v "$DATA_DIR:/data:ro" \
     "$IMAGE_NAME" > /dev/null

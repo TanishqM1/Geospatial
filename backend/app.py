@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import requests
 import os
 
 app = Flask(__name__)
+# Allow CORS from the frontend dev server
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}})
 
 OSRM_BASE_URL = os.getenv("OSRM_URL", "http://localhost:5000")
 
@@ -63,7 +66,17 @@ def nearest():
             "distance": wp.get("distance")
         })
 
-    return jsonify({"waypoints": waypoints})
+    # Also include a top-level single-result shape when only one waypoint
+    result = {"waypoints": waypoints}
+    if len(waypoints) == 1:
+        # expose convenience fields for the frontend
+        result.update({
+            "name": waypoints[0].get("name", ""),
+            "distance": waypoints[0].get("distance"),
+            "location": waypoints[0].get("location"),
+        })
+
+    return jsonify(result)
 
 
 # ------------------------------------------------------------------------------
@@ -153,10 +166,24 @@ def route():
             "location": wp.get("location")
         })
 
-    return jsonify({
-        "routes": routes,
-        "waypoints": waypoints
-    })
+    result = {"routes": routes, "waypoints": waypoints}
+
+    # Convenience top-level fields for frontend (use first route)
+    if routes:
+        first = routes[0]
+        # Flatten steps from all legs for easier frontend rendering.
+        flattened_steps = []
+        for leg in first.get("legs", []):
+            flattened_steps.extend(leg.get("steps", []))
+
+        result.update({
+            "distance": first.get("distance"),
+            "duration": first.get("duration"),
+            "geometry": first.get("geometry"),
+            "steps": flattened_steps,
+        })
+
+    return jsonify(result)
 
 
 # ------------------------------------------------------------------------------
@@ -196,9 +223,15 @@ def matrix():
     if osrm_data.get("code") != "Ok":
         return jsonify({"error": osrm_data.get("message", "OSRM error")}), 400
 
+    distances = osrm_data.get("distances", [])
+    durations = osrm_data.get("durations", [])
+
+    # Provide both explicit and shorter keys expected by frontend
     return jsonify({
-        "distance_matrix": osrm_data.get("distances", []),
-        "duration_matrix": osrm_data.get("durations", [])
+        "distance_matrix": distances,
+        "duration_matrix": durations,
+        "distances": distances,
+        "durations": durations,
     })
 
 
@@ -277,10 +310,19 @@ def match():
                 "waypoint_index": tp.get("waypoint_index")
             })
 
-    return jsonify({
-        "matchings": matchings,
-        "tracepoints": tracepoints
-    })
+    result = {"matchings": matchings, "tracepoints": tracepoints}
+
+    # Convenience fields for frontend
+    # matched_coordinates: list of locations from tracepoints (skip None)
+    matched_coords = [tp["location"] for tp in tracepoints if tp and tp.get("location")]
+    if matched_coords:
+        result["matched_coordinates"] = matched_coords
+
+    # confidence: use first matching's confidence if available
+    if matchings:
+        result["confidence"] = matchings[0].get("confidence")
+
+    return jsonify(result)
 
 
 if __name__ == "__main__":

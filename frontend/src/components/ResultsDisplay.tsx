@@ -200,10 +200,76 @@ function MatrixTable({ data }: { data: unknown }) {
 }
 
 function RouteSummary({ data }: { data: unknown }) {
+  type RouteStep = {
+    instruction?: string;
+    distance: number;
+    duration?: number;
+    name?: string;
+    maneuver?: {
+      type?: string;
+      modifier?: string;
+    };
+  };
+
   const d = data as {
     distance?: number;
     duration?: number;
-    steps?: { instruction: string; distance: number; name: string }[];
+    steps?: RouteStep[];
+    routes?: {
+      legs?: {
+        steps?: RouteStep[];
+      }[];
+    }[];
+  };
+
+  const fallbackLegSteps =
+    d.routes?.[0]?.legs?.flatMap((leg) => leg.steps ?? []) ?? [];
+  const steps = d.steps && d.steps.length > 0 ? d.steps : fallbackLegSteps;
+
+  const formatStepInstruction = (step: RouteStep) => {
+    if (step.instruction && step.instruction.trim().length > 0) {
+      return step.instruction;
+    }
+
+    const mType = step.maneuver?.type?.trim().toLowerCase();
+    const modifier = step.maneuver?.modifier?.trim().toLowerCase();
+    const road = step.name && step.name.trim().length > 0 ? ` onto ${step.name.trim()}` : "";
+
+    if (mType === "depart") {
+      if (modifier) {
+        return `Depart and head ${modifier}${road}`;
+      }
+      return `Depart${road}`;
+    }
+
+    if (mType === "arrive") {
+      return "Arrive at destination";
+    }
+
+    if (mType === "turn") {
+      if (modifier) {
+        return `${capitalize(modifier)} turn${road}`;
+      }
+      return `Turn${road}`;
+    }
+
+    if (mType === "continue") {
+      return `Continue${road}`;
+    }
+
+    if (mType === "fork") {
+      return `${modifier ? capitalize(modifier) + " fork" : "Take the fork"}${road}`;
+    }
+
+    if (mType === "merge") {
+      return `${modifier ? "Merge " + modifier : "Merge"}${road}`;
+    }
+
+    if (modifier) {
+      return `${capitalize(modifier)}${road}`;
+    }
+
+    return road ? `Continue${road}` : "Continue";
   };
 
   return (
@@ -223,20 +289,21 @@ function RouteSummary({ data }: { data: unknown }) {
           </div>
         </div>
 
-        {d.steps && d.steps.length > 0 && (
+        {steps.length > 0 && (
           <div className="mt-3">
             <p className="text-sm font-medium mb-2">Turn-by-turn:</p>
             <div className="max-h-[200px] overflow-auto space-y-1">
-              {d.steps.map((step, i) => (
+              {steps.map((step, i) => (
                 <div
                   key={i}
                   className="text-xs p-2 bg-muted/50 rounded flex justify-between"
                 >
                   <span>
-                    {i + 1}. {step.instruction || step.name || "Continue"}
+                    {i + 1}. {formatStepInstruction(step)}
                   </span>
                   <span className="text-muted-foreground">
                     {(step.distance / 1000).toFixed(2)} km
+                    {step.duration != null ? `, ${Math.round(step.duration)}s` : ""}
                   </span>
                 </div>
               ))}
@@ -246,6 +313,11 @@ function RouteSummary({ data }: { data: unknown }) {
       </CardContent>
     </Card>
   );
+}
+
+function capitalize(value: string) {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function MatchSummary({ data }: { data: unknown }) {
