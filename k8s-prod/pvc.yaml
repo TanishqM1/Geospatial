@@ -1,0 +1,18 @@
+# PersistentVolumeClaim with dynamic provisioning
+# Uses the cluster's default StorageClass (works with most cloud providers)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: osrm-data-pvc
+  namespace: geospatial
+  labels:
+    app.kubernetes.io/name: geospatial
+    app.kubernetes.io/component: storage
+spec:
+  # Leave storageClassName empty to use cluster default
+  # Override for specific providers: gp3 (AWS), premium-rwo (GKE), managed-premium (AKS)
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

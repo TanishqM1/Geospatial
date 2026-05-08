@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: geospatial
+  labels:
+    app.kubernetes.io/name: geospatial
+    app.kubernetes.io/component: backend
+data:
+  OSRM_URL: "http://localhost:5000"
+  OSRM_ALGORITHM: "mld"
+  FLASK_ENV: "production"
+  LOG_LEVEL: "INFO"

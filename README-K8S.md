@@ -1,243 +1,164 @@
 # Geospatial Routing Microservice (Kubernetes)
 
-## Architecture
+This document covers two Kubernetes deployment options:
 
-This project deploys a geospatial routing microservice using **Kubernetes sidecar pattern**:
+| Deployment | Folder | Use Case |
+|------------|--------|----------|
+| **Local Development** | `backend/k8s/` | Quick testing with Minikube |
+| **Production** | `k8s-prod/` | Production-ready backend API with HA, auto-scaling, security |
 
-- **Two containers in one Pod**:
-  - `osrm` container: Runs OSRM routing engine (port 5000)
-  - `flask` container: Runs Flask API proxy (port 8080)
-- **Communication**: Both containers share the same network namespace, so Flask can reach OSRM via `localhost:5000`
-- **Data**: Shared PersistentVolume mounted at `/data` containing preprocessed `.osrm` files
+> **Note:** The frontend (`frontend/`) is for local demo purposes only. It is NOT deployed in production.
 
-### Why Sidecar Pattern?
+---
 
-1. **Localhost communication**: Containers in the same Pod share network namespace
-2. **Shared storage**: Both containers can access the same OSRM data files
-3. **Atomic deployment**: Both services start/stop together
-4. **Simplified networking**: No need for Service DNS or inter-pod networking
+# Option 1: Local Development (Minikube)
 
-## Prerequisites
-
-- Windows PC with Docker Desktop installed and running
-- kubectl (Kubernetes CLI) - should already be installed
-- minikube - installed by this project
+Simple setup for testing the backend API on your local machine.
 
 ## Quick Start
 
-### 1. Run the setup script
-
+**Windows (PowerShell):**
 ```powershell
 .\setup-k8s.ps1
 ```
 
-This script will:
-1. Check prerequisites
-2. Start minikube cluster
-3. Copy OSRM data to minikube VM
-4. Build Flask Docker image
-5. Pull OSRM image
-6. Deploy to Kubernetes
-7. Wait for pods to be ready
-
-### 2. Get the service URL
-
-```powershell
-minikube service geospatial --url
-```
-
-### 3. Test the endpoint
-
-```powershell
-$url = minikube service geospatial --url
-curl -X POST -H "Content-Type: application/json" `
-  -d '{"coordinates":[[-123.3656,48.4284],[-123.1207,49.2827]]}' `
-  "$url/matrix"
-```
-
-## Manual Deployment (Step-by-step)
-
-If you prefer to run each step manually:
-
-### 1. Start minikube
-
-```powershell
+**Manual:**
+```bash
+# 1. Start minikube
 minikube start --driver=docker --cpus=4 --memory=8192
-```
 
-### 2. Copy OSRM data to minikube
-
-```powershell
+# 2. Copy OSRM data to minikube
 minikube ssh "sudo mkdir -p /mnt/geospatial-data"
-Get-ChildItem "data\british-columbia-251029.osrm*" | ForEach-Object {
-    minikube cp $_.FullName "/mnt/geospatial-data/$($_.Name)"
-}
-```
+# Copy your .osrm files to /mnt/geospatial-data
 
-### 3. Build images in minikube
+# 3. Build images in minikube
+eval $(minikube docker-env)
+docker build -f backend/Dockerfile.flask -t geospatial-flask:latest backend/
 
-```powershell
-# Point Docker to minikube's daemon
-minikube docker-env --shell powershell | Invoke-Expression
+# 4. Deploy
+kubectl apply -f backend/k8s/
 
-# Build Flask image
-docker build -f Dockerfile.flask -t geospatial-flask:latest .
-
-# Pull OSRM image
-docker pull osrm/osrm-backend:latest
-```
-
-### 4. Deploy to Kubernetes
-
-```powershell
-kubectl apply -f k8s/pv-pvc.yaml
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
-```
-
-### 5. Wait for pods
-
-```powershell
-kubectl wait --for=condition=ready pod -l app=geospatial --timeout=120s
-```
-
-## Useful Commands
-
-### View pod status
-```powershell
-kubectl get pods -l app=geospatial
-kubectl describe pod -l app=geospatial
-```
-
-### View logs
-```powershell
-# OSRM logs
-kubectl logs -l app=geospatial -c osrm
-
-# Flask logs
-kubectl logs -l app=geospatial -c flask
-
-# Follow logs (live tail)
-kubectl logs -f -l app=geospatial -c flask
-```
-
-### Get service URL
-```powershell
+# 5. Get URL
 minikube service geospatial --url
 ```
 
-### Port forward (alternative access method)
-```powershell
-kubectl port-forward svc/geospatial 8080:80
-# Then access at http://localhost:8080
+## Local Files
+
+| File | Purpose |
+|------|---------|
+| `backend/k8s/pv-pvc.yaml` | PersistentVolume (hostPath for Minikube) |
+| `backend/k8s/deployment.yaml` | Single pod with OSRM + Flask containers |
+| `backend/k8s/service.yaml` | NodePort service |
+
+---
+
+# Option 2: Production Deployment
+
+Production-ready backend API deployment for cloud Kubernetes (EKS, GKE, AKS).
+
+## Quick Start
+
+```bash
+# Deploy to production cluster
+./deploy-prod.sh deploy
+
+# Or test production config locally with Minikube
+./deploy-prod.sh local
+
+# Check status
+./deploy-prod.sh status
+
+# View logs
+./deploy-prod.sh logs
+
+# Tear down
+./deploy-prod.sh delete
 ```
 
-### Restart deployment
-```powershell
-kubectl rollout restart deployment/geospatial
+## Features
+
+- **High Availability**: 2+ replicas with pod anti-affinity
+- **Auto-scaling**: HPA scales 2-10 pods based on CPU/memory
+- **Security**: Non-root containers, read-only filesystem, NetworkPolicies
+- **Dynamic Storage**: Uses cluster default StorageClass
+- **Ingress**: Single entry point for API
+- **PodDisruptionBudget**: Safe node maintenance
+
+## Production Files
+
+| File | Purpose |
+|------|---------|
+| `k8s-prod/namespace.yaml` | Dedicated `geospatial` namespace |
+| `k8s-prod/configmap.yaml` | Environment configuration |
+| `k8s-prod/pvc.yaml` | Dynamic storage provisioning |
+| `k8s-prod/backend-deployment.yaml` | Backend: Flask + OSRM sidecar (2 replicas) |
+| `k8s-prod/services.yaml` | ClusterIP service |
+| `k8s-prod/ingress.yaml` | Ingress for external access |
+| `k8s-prod/pdb.yaml` | PodDisruptionBudget |
+| `k8s-prod/networkpolicy.yaml` | Network isolation |
+| `k8s-prod/hpa.yaml` | HorizontalPodAutoscaler |
+| `k8s-prod/kustomization.yaml` | Kustomize deployment |
+
+## Cloud Provider Configuration
+
+### AWS EKS
+```yaml
+# In pvc.yaml
+storageClassName: gp3
+
+# In ingress.yaml - uncomment:
+kubernetes.io/ingress.class: alb
+alb.ingress.kubernetes.io/scheme: internet-facing
 ```
 
-### Delete everything
-```powershell
-kubectl delete -f k8s/
+### GCP GKE
+```yaml
+# In pvc.yaml
+storageClassName: premium-rwo
+
+# In ingress.yaml - uncomment:
+kubernetes.io/ingress.class: gce
 ```
 
-### Stop minikube
-```powershell
-minikube stop
+### Azure AKS
+```yaml
+# In pvc.yaml
+storageClassName: managed-premium
+# NGINX Ingress recommended
 ```
 
-### Delete minikube cluster
-```powershell
-minikube delete
+---
+
+# Comparison
+
+| Feature | Local (`backend/k8s/`) | Production (`k8s-prod/`) |
+|---------|------------------------|--------------------------|
+| Replicas | 1 | 2+ with anti-affinity |
+| Storage | hostPath | Dynamic provisioning |
+| Service | NodePort | ClusterIP + Ingress |
+| Auto-scaling | No | HPA (2-10 pods) |
+| Network Policy | No | Yes |
+| Security Context | Basic | Non-root, read-only FS |
+| Image Tags | `latest` | Pinned versions |
+
+---
+
+# Troubleshooting
+
+## Pods not starting
+```bash
+kubectl describe pod -n geospatial -l app.kubernetes.io/name=geospatial
+kubectl logs -n geospatial -l app.kubernetes.io/component=backend -c osrm
+kubectl logs -n geospatial -l app.kubernetes.io/component=backend -c flask
 ```
 
-## Troubleshooting
+## OSRM data not found
+- Ensure `.osrm` files are in the PersistentVolume
+- For Minikube: `minikube ssh "ls -lh /mnt/geospatial-data"`
 
-### Pods not starting
-```powershell
-kubectl describe pod -l app=geospatial
-kubectl logs -l app=geospatial -c osrm
-kubectl logs -l app=geospatial -c flask
+## Cannot access service
+```bash
+kubectl get svc -n geospatial
+kubectl get ingress -n geospatial
+kubectl port-forward -n geospatial svc/backend 8080:80
 ```
-
-### OSRM data not found
-- Ensure `.osrm` files are in the `data/` directory
-- Check files were copied: `minikube ssh "ls -lh /mnt/geospatial-data"`
-
-### Image pull errors
-```powershell
-# Re-configure Docker environment
-minikube docker-env --shell powershell | Invoke-Expression
-
-# Rebuild Flask image
-docker build -f Dockerfile.flask -t geospatial-flask:latest .
-```
-
-### Cannot access service
-```powershell
-# Check service exists
-kubectl get svc geospatial
-
-# Check pods are ready
-kubectl get pods -l app=geospatial
-
-# Get service URL
-minikube service geospatial --url
-```
-
-## Architecture Diagram
-
-```
-┌─────────────────────────────────────────┐
-│           Kubernetes Pod                │
-│  ┌───────────────────────────────────┐  │
-│  │  Network Namespace (localhost)    │  │
-│  │                                   │  │
-│  │  ┌──────────────┐ ┌────────────┐ │  │
-│  │  │ OSRM         │ │ Flask      │ │  │
-│  │  │ Container    │ │ Container  │ │  │
-│  │  │              │ │            │ │  │
-│  │  │ Port 5000 ◄──┼─┤ calls      │ │  │
-│  │  │              │ │ localhost  │ │  │
-│  │  └──────┬───────┘ └─────┬──────┘ │  │
-│  └─────────┼───────────────┼────────┘  │
-│            │               │           │
-│            ▼               ▼           │
-│     ┌──────────────────────────┐      │
-│     │  Shared PersistentVolume │      │
-│     │  /data/*.osrm files      │      │
-│     └──────────────────────────┘      │
-└─────────────────────────────────────────┘
-              │
-              ▼
-       NodePort Service
-              │
-              ▼
-         External Access
-     (via minikube service)
-```
-
-## Files
-
-- `Dockerfile.flask` - Flask-only container image
-- `app.py` - Flask API (reads OSRM_URL from env)
-- `k8s/pv-pvc.yaml` - PersistentVolume and PersistentVolumeClaim
-- `k8s/deployment.yaml` - Pod with OSRM + Flask containers
-- `k8s/service.yaml` - NodePort service for external access
-- `setup-k8s.ps1` - Automated setup script
-
-## Production Considerations
-
-For production deployment:
-
-1. **Use managed Kubernetes** (AKS, EKS, GKE)
-2. **Separate data loading**: Use InitContainer or separate Job to preprocess OSM data
-3. **Use proper storage**: Replace hostPath with cloud storage (Azure Files, EBS, GCS)
-4. **Add Ingress**: Replace NodePort with Ingress controller + TLS
-5. **Add monitoring**: Prometheus metrics, Grafana dashboards
-6. **Set resource limits**: Tune CPU/memory based on load
-7. **Add HPA**: Horizontal Pod Autoscaler for auto-scaling
-8. **Security**: NetworkPolicies, RBAC, pod security standards
-9. **Use ConfigMaps/Secrets**: For configuration and credentials
-10. **Consider separation**: Split into separate Deployments if scaling independently

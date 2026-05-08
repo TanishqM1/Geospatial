@@ -25,9 +25,22 @@ A **free, self-hosted** geospatial routing service for computing distances, trav
 ### Prerequisites
 
 - Docker installed and running
+- Node.js (for frontend)
 - OSRM data files in `./data/` folder (see [Data Setup](#data-setup))
 
-### Start the Service
+### Start Everything (Backend + Frontend)
+
+**Mac/Linux:**
+```bash
+./start-local.sh
+```
+This starts:
+- Backend API at http://localhost:8080
+- Frontend UI at http://localhost:3000
+
+Press `Ctrl+C` to stop everything.
+
+### Start Backend Only
 
 **Mac/Linux:**
 ```bash
