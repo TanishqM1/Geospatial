@@ -34,6 +34,12 @@ A **free, self-hosted** geospatial routing service for computing distances, trav
 ```bash
 ./start-local.sh
 ```
+
+**Windows (PowerShell):**
+```powershell
+.\start-local.ps1
+```
+
 This starts:
 - Backend API at http://localhost:8080
 - Frontend UI at http://localhost:3000
