@@ -1,3 +1,15 @@
+# Local start/stop scripts and runtime artifacts (local only)
+/start-all.sh
+/stop-all.sh
+/start-all.pids
+/logs/
+
+# Python virtualenvs and caches
+.venv/
+__pycache__/
+
+# Node modules (frontend)
+/frontend/node_modules/
 # Python
 __pycache__/
 *.py[cod]
