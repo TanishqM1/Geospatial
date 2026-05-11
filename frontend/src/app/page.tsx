@@ -38,7 +38,12 @@ export default function Home() {
   useEffect(() => {
     setResult(null);
     setError(null);
-    setCoordinates(createInitialCoordinates(info.minCoordinates));
+    // For the matrix tab, preload a set of major BC cities
+    if (mode === "matrix") {
+      setCoordinates(createInitialCoordinates(5));
+    } else {
+      setCoordinates(createInitialCoordinates(info.minCoordinates));
+    }
   }, [mode, info.minCoordinates]);
 
   const handleSubmit = async () => {

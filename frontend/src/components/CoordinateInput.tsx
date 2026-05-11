@@ -152,9 +152,11 @@ export function coordinatesToArray(
 
 export function createInitialCoordinates(count: number): Coordinate[] {
   const defaults = [
-    { lon: "-123.1207", lat: "49.2827" },   // Vancouver downtown
-    { lon: "-123.0708", lat: "49.2488" },   // Vancouver east
-    { lon: "-122.8490", lat: "49.1913" },   // Surrey
+    { lon: "-123.1207", lat: "49.2827" }, // Vancouver — Stanley Park
+    { lon: "-123.3656", lat: "48.4284" }, // Victoria — BC Parliament Buildings
+    { lon: "-122.8275", lat: "49.1117" }, // Surrey — Holland Park / Central City
+    { lon: "-122.9805", lat: "49.2488" }, // Burnaby — Metrotown
+    { lon: "-119.4960", lat: "49.8880" }, // Kelowna — Okanagan Lake
   ];
 
   return Array.from({ length: count }, (_, i) => ({
