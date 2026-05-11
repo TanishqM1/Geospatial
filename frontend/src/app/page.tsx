@@ -16,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 const DEFAULT_API_URL = "http://localhost:8080";
 
-const modes: ApiMode[] = ["nearest", "route", "matrix", "match"];
+const modes: ApiMode[] = ["nearest", "route", "matrix"];
 
 export default function Home() {
   const [mode, setMode] = useState<ApiMode>("route");
@@ -73,9 +73,7 @@ export default function Home() {
         body.geometries = "geojson";
       }
 
-      if (mode === "match") {
-        body.geometries = "geojson";
-      }
+      // Map match removed from UI; no special-case options here
     }
 
     try {

@@ -1,4 +1,4 @@
-export type ApiMode = "nearest" | "route" | "matrix" | "match";
+export type ApiMode = "nearest" | "route" | "matrix";
 
 export interface NearestRequest {
   coordinate: [number, number];
@@ -45,17 +45,6 @@ export interface MatrixResponse {
   durations: number[][];
 }
 
-export interface MatchRequest {
-  coordinates: [number, number][];
-  timestamps?: number[];
-  radiuses?: number[];
-}
-
-export interface MatchResponse {
-  confidence: number;
-  matched_coordinates: [number, number][];
-  geometry: GeoJSON.LineString | string;
-}
 
 export interface HealthResponse {
   status: "healthy" | "unhealthy";

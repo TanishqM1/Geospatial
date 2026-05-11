@@ -58,13 +58,5 @@ export const modeInfo: Record<ApiMode, ModeInfo> = {
     singleCoordinate: false,
     extraOptions: [],
   },
-  match: {
-    title: "Map Match",
-    shortDesc: "Snap GPS trace to roads",
-    description: "Correct GPS drift by snapping a sequence of recorded points to the actual roads traveled. Used for cleaning up GPS tracks.",
-    minCoordinates: 2,
-    maxCoordinates: 50,
-    singleCoordinate: false,
-    extraOptions: [],
-  },
+  /* Map Match removed from UI - server endpoint remains available */
 };

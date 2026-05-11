@@ -67,7 +67,7 @@ export function ResultsDisplay({ mode, data, error }: ResultsDisplayProps) {
 
         {mode === "matrix" && data && <MatrixTable data={data} />}
         {mode === "route" && data && <RouteSummary data={data} />}
-        {mode === "match" && data && <MatchSummary data={data} />}
+        {/* Map Match removed from UI */}
         {mode === "nearest" && data && <NearestSummary data={data} />}
       </TabsContent>
 
@@ -121,21 +121,20 @@ function extractMapData(mode: ApiMode, data: unknown) {
     }
   }
 
-  if (mode === "match") {
-    if (d.matched_coordinates) {
-      const coords = d.matched_coordinates as [number, number][];
-      result.matchedPoints = coords.map((c) => [c[1], c[0]]); // Flip to lat/lon
-      if (result.matchedPoints.length > 0) {
-        result.center = result.matchedPoints[0];
-        result.hasMapData = true;
-      }
+  // Support match responses if the server returns matched_coordinates or geometry
+  if (d.matched_coordinates) {
+    const coords = d.matched_coordinates as [number, number][];
+    result.matchedPoints = coords.map((c) => [c[1], c[0]]); // Flip to lat/lon
+    if (result.matchedPoints.length > 0) {
+      result.center = result.matchedPoints[0];
+      result.hasMapData = true;
     }
-    if (d.geometry) {
-      const geom = d.geometry as { coordinates?: [number, number][] };
-      if (geom.coordinates) {
-        result.polyline = geom.coordinates.map((c) => [c[1], c[0]]);
-        result.hasMapData = true;
-      }
+  }
+  if (!result.hasMapData && d.geometry) {
+    const geom = d.geometry as { coordinates?: [number, number][] };
+    if (geom.coordinates) {
+      result.polyline = geom.coordinates.map((c) => [c[1], c[0]]);
+      result.hasMapData = true;
     }
   }
 
@@ -320,30 +319,8 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function MatchSummary({ data }: { data: unknown }) {
-  const d = data as {
-    confidence?: number;
-    matched_coordinates?: [number, number][];
-  };
-
-  return (
-    <Card className="mt-4">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Match Summary</CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm">
-        <div>
-          <span className="text-muted-foreground">Confidence:</span>{" "}
-          <strong>{((d.confidence ?? 0) * 100).toFixed(1)}%</strong>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Points matched:</span>{" "}
-          <strong>{d.matched_coordinates?.length ?? 0}</strong>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// Map Match UI removed; server may still return match results which are
+// displayed on the map if present (handled in extractMapData).
 
 function NearestSummary({ data }: { data: unknown }) {
   const d = data as {
