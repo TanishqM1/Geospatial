@@ -1,7 +1,7 @@
 # Local start/stop scripts and runtime artifacts (local only)
-/start-all.sh
-/stop-all.sh
-/start-all.pids
+/scripts/local/start-all.sh
+/scripts/local/stop-all.sh
+/scripts/local/start-all.pids
 /logs/
 
 # Python virtualenvs and caches
