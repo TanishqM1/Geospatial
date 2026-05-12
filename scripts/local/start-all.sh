@@ -19,8 +19,10 @@ echo "Building $IMG_NAME..."
 docker build -t "$IMG_NAME" -f "$ROOT/backend/Dockerfile" "$ROOT/backend"
 
 docker rm -f "$CT_NAME" 2>/dev/null || true
-echo "Starting container $CT_NAME (host port 8080 -> Flask, 5000 -> OSRM)..."
-docker run -d --name "$CT_NAME" -p 8080:8080 -p 5000:5000 -v "$DATA_DIR:/data:ro" "$IMG_NAME"
+# Only publish Flask (8080). OSRM stays on 5000 inside the container (Flask uses OSRM_URL).
+# Avoids host port 5000 conflicts (e.g. AirPlay Receiver on macOS).
+echo "Starting container $CT_NAME (host port 8080 -> Flask; OSRM is internal)..."
+docker run -d --name "$CT_NAME" -p 8080:8080 -v "$DATA_DIR:/data:ro" "$IMG_NAME"
 
 echo -n "Waiting for http://127.0.0.1:8080/health"
 for _ in $(seq 1 90); do
