@@ -38,13 +38,13 @@ chmod +x scripts/local/start-all.sh scripts/local/stop-all.sh
 ./scripts/local/start-all.sh
 ```
 
-This builds and runs the combined OSRM + Flask container on [http://127.0.0.1:8080](http://127.0.0.1:8080). Start the Next.js UI in another terminal:
+This builds and runs the combined **OSRM + Flask** container on [http://127.0.0.1:8080](http://127.0.0.1:8080), starts the **Next.js** UI on [http://localhost:3000](http://localhost:3000) (runs `npm install` in `frontend/` only if `node_modules` is missing), and starts the two **applications** demos unless disabled (see below).
 
-```bash
-cd frontend && npm install && npm run dev
-```
+To start **only** the API container: `START_FRONTEND=0 START_DEMOS=0 ./scripts/local/start-all.sh`
 
-Bundled demos live under [`applications/`](applications/): **`applications/VRP`** (port 8000) and **`applications/ResponderDispatch`** (port 8100). `start-all.sh` starts them after the API is healthy unless you set `START_DEMOS=0`. They call Geospatial at `http://127.0.0.1:8080` unless you set `GEOSPATIAL_URL` in their environment.
+To skip the web UI only: `START_FRONTEND=0 ./scripts/local/start-all.sh`
+
+To skip VRP + ResponderDispatch only: `START_DEMOS=0 ./scripts/local/start-all.sh`
 
 ### Test the Service
 
@@ -59,7 +59,7 @@ GET http://localhost:8080/health
 ./scripts/local/stop-all.sh
 ```
 
-This stops the Geospatial Docker container and any process listening on ports **8000** (VRP) and **8100** (ResponderDispatch). Stop the Next.js dev server with `Ctrl+C` in its terminal.
+This stops the Geospatial Docker container and any process listening on ports **3000** (Next.js), **8000** (VRP), and **8100** (ResponderDispatch).
 
 ---
 
@@ -142,7 +142,9 @@ print(resp.json())
 
 ## Advanced: Kubernetes Deployment
 
-See [README-K8S.md](README-K8S.md).
+See [README-K8S.md](README-K8S.md) for quick paths to local vs production manifests.
+
+For a **single long-form reference** (use cases, architecture, Docker vs K8s local vs prod, applications, ports, and operational caveats), see **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ---
 
