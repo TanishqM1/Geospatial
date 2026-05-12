@@ -154,6 +154,9 @@ export function createInitialCoordinates(count: number): Coordinate[] {
   const defaults = [
     { lon: "-123.1207", lat: "49.2827" }, // Vancouver — Stanley Park
     { lon: "-122.8275", lat: "49.1117" }, // Surrey — Holland Park / Central City
+    { lon: "-122.8490", lat: "49.1666" }, // Delta / Ladner
+    { lon: "-122.7987", lat: "49.2820" }, // New Westminster
+    { lon: "-123.3656", lat: "48.4284" }, // Victoria — BC Parliament Buildings
   ];
 
   return Array.from({ length: count }, (_, i) => ({
