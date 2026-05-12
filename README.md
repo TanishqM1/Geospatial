@@ -32,31 +32,15 @@ A **free, self-hosted** geospatial routing service for computing distances, trav
 
 **Mac/Linux:**
 ```bash
-./start-local.sh
-```
-
-**Windows (PowerShell):**
-```powershell
-.\start-local.ps1
+./scripts/local/start-all.sh
 ```
 
 This starts:
-- Backend API at http://localhost:8080
+- Geospatial backend at http://localhost:8080
 - Frontend UI at http://localhost:3000
+- VRP sidecar and responder dispatch sidecar in the background
 
 Press `Ctrl+C` to stop everything.
-
-### Start Backend Only
-
-**Mac/Linux:**
-```bash
-./start-osrm.sh
-```
-
-**Windows (PowerShell):**
-```powershell
-.\start-osrm.ps1
-```
 
 ### Test the Service
 
@@ -68,7 +52,7 @@ GET http://localhost:8080/health
 ### Stop the Service
 
 ```bash
-docker stop geospatial
+./scripts/local/stop-all.sh
 ```
 
 ---
