@@ -30,17 +30,20 @@ A **free, self-hosted** geospatial routing service for computing distances, trav
 
 ### Start Everything (Backend + Frontend)
 
-**Mac/Linux:**
+**Mac/Linux:** from the repo root, with Docker running and OSRM `*.osrm` files in `./data/`:
+
 ```bash
+chmod +x scripts/local/start-all.sh scripts/local/stop-all.sh
 ./scripts/local/start-all.sh
 ```
 
-This starts:
-- Geospatial backend at http://localhost:8080
-- Frontend UI at http://localhost:3000
-- VRP sidecar and responder dispatch sidecar in the background
+This builds and runs the combined OSRM + Flask container on [http://127.0.0.1:8080](http://127.0.0.1:8080). Start the Next.js UI in another terminal:
 
-Press `Ctrl+C` to stop everything.
+```bash
+cd frontend && npm install && npm run dev
+```
+
+Demos in sibling repos (`VRP`, `ResponderDispatch`) expect the API at `http://127.0.0.1:8080` unless you set `GEOSPATIAL_URL` there.
 
 ### Test the Service
 
@@ -54,6 +57,8 @@ GET http://localhost:8080/health
 ```bash
 ./scripts/local/stop-all.sh
 ```
+
+Stop the dev frontend with `Ctrl+C` in its terminal.
 
 ---
 

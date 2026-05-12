@@ -48,7 +48,7 @@ EXPOSE 8080 5000
 VOLUME ["/data"]
 
 # --- Healthcheck (optional but useful) ---
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD curl -fs http://localhost:8080/ || curl -fs http://localhost:5000/ || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s CMD curl -fsS http://127.0.0.1:8080/health >/dev/null && curl -fsS http://127.0.0.1:5000/ >/dev/null || exit 1
 
 # --- Start OSRM + Flask ---
 CMD ["bash", "/app/start.sh"]

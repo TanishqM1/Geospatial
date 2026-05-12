@@ -80,7 +80,8 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /health
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10

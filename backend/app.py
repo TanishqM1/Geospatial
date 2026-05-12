@@ -4,8 +4,16 @@ import requests
 import os
 
 app = Flask(__name__)
-# Allow CORS from the frontend dev server
-CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}})
+
+def _cors_origins():
+    raw = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    )
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+CORS(app, resources={r"/*": {"origins": _cors_origins()}})
 
 OSRM_BASE_URL = os.getenv("OSRM_URL", "http://localhost:5000")
 
