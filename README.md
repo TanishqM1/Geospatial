@@ -7,6 +7,7 @@ A **free, self-hosted** geospatial routing service for computing distances, trav
 - **OSRM** (Open Source Routing Machine) - High-performance routing engine
 - **Flask** - Python API wrapper
 - **Docker** - Containerized deployment
+- **Bundled demos** — [`applications/`](applications/) (VRP + ResponderDispatch) call the same API for local demos
 
 ## Features
 
@@ -43,7 +44,7 @@ This builds and runs the combined OSRM + Flask container on [http://127.0.0.1:80
 cd frontend && npm install && npm run dev
 ```
 
-Demos in sibling repos (`VRP`, `ResponderDispatch`) expect the API at `http://127.0.0.1:8080` unless you set `GEOSPATIAL_URL` there.
+Bundled demos live under [`applications/`](applications/): **`applications/VRP`** (port 8000) and **`applications/ResponderDispatch`** (port 8100). `start-all.sh` starts them after the API is healthy unless you set `START_DEMOS=0`. They call Geospatial at `http://127.0.0.1:8080` unless you set `GEOSPATIAL_URL` in their environment.
 
 ### Test the Service
 
@@ -58,7 +59,7 @@ GET http://localhost:8080/health
 ./scripts/local/stop-all.sh
 ```
 
-Stop the dev frontend with `Ctrl+C` in its terminal.
+This stops the Geospatial Docker container and any process listening on ports **8000** (VRP) and **8100** (ResponderDispatch). Stop the Next.js dev server with `Ctrl+C` in its terminal.
 
 ---
 

@@ -1,0 +1,318 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Nearest Responder Dispatch</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      body { font-family: system-ui, Arial; max-width: 1200px; margin: 20px auto; padding: 0 16px; }
+      .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; }
+      #map { height: 560px; border: 1px solid #ddd; border-radius: 10px; }
+      .panel { border: 1px solid #ddd; border-radius: 10px; padding: 12px; background: #fafafa; }
+      .actions { display: flex; gap: 8px; margin: 10px 0 14px 0; }
+      button { padding: 8px 12px; border-radius: 8px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+      ul, ol { margin-top: 8px; }
+      li { margin-bottom: 6px; }
+      code { font-size: 12px; }
+      .chip { display: inline-block; font-size: 11px; border: 1px solid #bbb; border-radius: 999px; padding: 2px 7px; margin-right: 6px; }
+      .winner { border-color: #16a34a; background: #f0fdf4; }
+      .muted { color: #555; font-size: 13px; }
+      .editable-grid { display: grid; gap: 10px; margin-top: 10px; }
+      .editable-card { border: 1px solid #ddd; border-radius: 10px; background: #fff; padding: 10px; }
+      .editable-card header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+      .editable-card .fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+      .editable-card label { display: flex; flex-direction: column; font-size: 11px; color: #555; }
+      .editable-card input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 8px; font-size: 13px; }
+      .status-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+      .status-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #cbd5e1; border-radius: 999px; padding: 4px 10px; font-size: 12px; background: #fff; }
+      .status-dot { width: 8px; height: 8px; border-radius: 999px; background: #94a3b8; }
+      .status-dot.live { background: #16a34a; }
+      @media (max-width: 950px) { .grid { grid-template-columns: 1fr; } #map { height: 420px; } }
+    </style>
+  </head>
+  <body>
+    <h1>Nearest Responder Dispatch</h1>
+    <p class="muted">Sidecar demo: random BC positions for five responders and an incident, snapped on the server to roads, then nearest unit by driving time via the Geospatial API.</p>
+
+    <div class="panel" style="margin-bottom: 14px;">
+      <h3>Responder and incident positions</h3>
+      <div class="muted">Five responders and one incident are placed in southern BC. Coordinates are randomized on land-ish bounds, then the server snaps them to the road network before routing. Set <code>GEOSPATIAL_URL</code> if the Geospatial API is not on <code>http://127.0.0.1:8080</code>.</div>
+      <div id="live-list" class="editable-grid"></div>
+      <h3>Incident location</h3>
+      <div id="event" class="editable-card"></div>
+      <div class="actions" style="margin-top: 14px;">
+        <button id="generate" type="button">Generate simulation</button>
+        <button id="run" type="button">Run dispatch</button>
+      </div>
+      <div class="status-bar">
+        <span class="status-pill"><span id="live-dot" class="status-dot"></span><span id="live-state">Idle</span></span>
+        <span class="status-pill">BC bounds: Lower Mainland through Interior</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div id="map"></div>
+      <div class="panel">
+        <h3>Dispatch Steps</h3>
+        <ol id="steps"></ol>
+        <h3>Nearest Responder</h3>
+        <div id="winner" class="panel winner">Run dispatch to select winner</div>
+        <h3>Ranked Responders</h3>
+        <ol id="ranked"></ol>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+      const map = L.map("map").setView([49.26, -123.1], 10);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+
+      let layers = [];
+      let responderState = [];
+      let eventState = null;
+      let isDispatching = false;
+
+      const BC_BOUNDS = {
+        minLon: -123.2,
+        maxLon: -119.0,
+        minLat: 49.0,
+        maxLat: 50.1,
+      };
+
+      function clearMap() {
+        layers.forEach((l) => map.removeLayer(l));
+        layers = [];
+      }
+
+      function randomInRange(min, max) {
+        return Number((Math.random() * (max - min) + min).toFixed(5));
+      }
+
+      function redrawSimulation() {
+        const liveList = document.getElementById('live-list');
+        const eventDiv = document.getElementById('event');
+
+        liveList.innerHTML = '';
+        eventDiv.innerHTML = '';
+        clearMap();
+
+        responderState.forEach((r, idx) => {
+          const card = document.createElement('div');
+          card.className = 'editable-card';
+          card.dataset.index = String(idx);
+          card.innerHTML = `
+            <header>
+              <div><span class="chip">${r.id}</span><strong>Responder</strong></div>
+              <span class="muted">Live GPS</span>
+            </header>
+            <div class="fields">
+              <label>Name <input data-field="name" value="${r.name}" /></label>
+              <label>Longitude <input data-field="lon" value="${r.coordinate[0]}" /></label>
+              <label>Latitude <input data-field="lat" value="${r.coordinate[1]}" /></label>
+            </div>
+          `;
+          liveList.appendChild(card);
+
+          const marker = L.circleMarker([r.coordinate[1], r.coordinate[0]], { radius: 7, color: '#1d4ed8' }).addTo(map);
+          marker.bindPopup(`${r.name} (${r.id})<br/>${fmt(r.coordinate)}`);
+          layers.push(marker);
+        });
+
+        eventDiv.innerHTML = `
+          <header>
+            <div><span class="chip">EVENT</span><strong>Incident</strong></div>
+            <span class="muted">Live GPS</span>
+          </header>
+          <div class="fields">
+            <label>Name <input data-field="event-name" value="${eventState.name}" /></label>
+            <label>Longitude <input data-field="event-lon" value="${eventState.coordinate[0]}" /></label>
+            <label>Latitude <input data-field="event-lat" value="${eventState.coordinate[1]}" /></label>
+          </div>
+        `;
+
+        const eventMarker = L.circleMarker([eventState.coordinate[1], eventState.coordinate[0]], { radius: 8, color: '#dc2626' }).addTo(map);
+        eventMarker.bindPopup(`${eventState.name}<br/>${fmt(eventState.coordinate)}`);
+        layers.push(eventMarker);
+
+        const fg = L.featureGroup(layers);
+        map.fitBounds(fg.getBounds().pad(0.2));
+      }
+
+      function syncStateFromInputs() {
+        responderState = [...document.querySelectorAll('#live-list .editable-card')].map((card, idx) => ({
+          id: `R${idx + 1}`,
+          name: card.querySelector('[data-field="name"]').value.trim(),
+          coordinate: [
+            Number(card.querySelector('[data-field="lon"]').value),
+            Number(card.querySelector('[data-field="lat"]').value),
+          ],
+        }));
+
+        eventState = {
+          name: document.querySelector('[data-field="event-name"]').value.trim(),
+          coordinate: [
+            Number(document.querySelector('[data-field="event-lon"]').value),
+            Number(document.querySelector('[data-field="event-lat"]').value),
+          ],
+        };
+      }
+
+      function generateSimulation() {
+        syncStateFromInputs();
+
+        responderState = responderState.map((r) => ({
+          ...r,
+          coordinate: [
+            randomInRange(BC_BOUNDS.minLon, BC_BOUNDS.maxLon),
+            randomInRange(BC_BOUNDS.minLat, BC_BOUNDS.maxLat),
+          ],
+        }));
+
+        eventState = {
+          ...eventState,
+          coordinate: [
+            randomInRange(BC_BOUNDS.minLon, BC_BOUNDS.maxLon),
+            randomInRange(BC_BOUNDS.minLat, BC_BOUNDS.maxLat),
+          ],
+        };
+
+        redrawSimulation();
+      }
+
+      function setLiveState(text, live = false) {
+        document.getElementById('live-state').textContent = text;
+        document.getElementById('live-dot').classList.toggle('live', live);
+      }
+
+      function fmt(coord) {
+        return `(${coord[1].toFixed(4)}, ${coord[0].toFixed(4)})`;
+      }
+
+      async function loadDefaults() {
+        const res = await fetch('/defaults');
+        const data = await res.json();
+
+        responderState = data.responders || [];
+        eventState = data.event || { name: 'Incident', coordinate: [-123.1, 49.26] };
+
+        redrawSimulation();
+        setLiveState('Ready', false);
+
+        await runDispatch(true);
+      }
+
+      function collectDispatchInputs() {
+        const responders = [...document.querySelectorAll('#live-list .editable-card')].map((card, idx) => ({
+          id: `R${idx + 1}`,
+          name: card.querySelector('[data-field="name"]').value.trim(),
+          coordinate: [
+            Number(card.querySelector('[data-field="lon"]').value),
+            Number(card.querySelector('[data-field="lat"]').value),
+          ],
+        }));
+
+        const event = {
+          name: document.querySelector('[data-field="event-name"]').value.trim(),
+          coordinate: [
+            Number(document.querySelector('[data-field="event-lon"]').value),
+            Number(document.querySelector('[data-field="event-lat"]').value),
+          ],
+        };
+
+        return { responders, event };
+      }
+
+      function renderDispatch(data) {
+        const stepsEl = document.getElementById('steps');
+        stepsEl.innerHTML = '';
+        (data.steps || []).forEach((s) => {
+          const li = document.createElement('li');
+          li.textContent = s;
+          stepsEl.appendChild(li);
+        });
+
+        const winnerEl = document.getElementById('winner');
+        const w = data.winner;
+        winnerEl.innerHTML = `<strong>${w.name} (${w.id})</strong><br/>ETA: ${Math.round(w.duration)} sec | Distance: ${Math.round(w.distance)} m`;
+
+        const rankedEl = document.getElementById('ranked');
+        rankedEl.innerHTML = '';
+        (data.ranked || []).forEach((r, idx) => {
+          const li = document.createElement('li');
+          li.innerHTML = `<strong>#${idx + 1} ${r.name} (${r.id})</strong> - ETA ${Math.round(r.duration)} sec, ${Math.round(r.distance)} m`;
+          rankedEl.appendChild(li);
+        });
+
+        // Draw all routes faded, winner highlighted
+        (data.ranked || []).forEach((r, idx) => {
+          const geom = r.route && r.route.geometry && r.route.geometry.coordinates ? r.route.geometry : null;
+          if (!geom) return;
+          const line = L.polyline(
+            geom.coordinates.map(([lon, lat]) => [lat, lon]),
+            {
+              color: idx === 0 ? '#16a34a' : '#94a3b8',
+              weight: idx === 0 ? 5 : 3,
+              opacity: idx === 0 ? 0.95 : 0.5,
+            }
+          ).addTo(map);
+          line.bindPopup(`${r.name} (${r.id})<br/>ETA ${Math.round(r.duration)} sec`);
+          layers.push(line);
+        });
+      }
+
+      async function runDispatch(fromAuto = false) {
+        if (isDispatching) return;
+        isDispatching = true;
+
+        const payload = collectDispatchInputs();
+
+        const res = await fetch('/dispatch/nearest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            metric: 'duration',
+            responders: payload.responders,
+            event: payload.event,
+          }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          const detail = data.detail;
+          alert(typeof detail === 'string' ? detail : JSON.stringify(detail));
+          isDispatching = false;
+          return;
+        }
+        
+        // Clear old route polylines; markers stay
+        const oldRoutes = layers.filter(l => l instanceof L.Polyline);
+        oldRoutes.forEach(l => map.removeLayer(l));
+        layers = layers.filter(l => !(l instanceof L.Polyline));
+        
+        renderDispatch(data);
+        document.getElementById('live-state').textContent = fromAuto ? 'Initial dispatch complete' : 'Dispatch complete';
+        document.getElementById('live-dot').classList.add('live');
+        isDispatching = false;
+      }
+
+      document.getElementById('run').addEventListener('click', () => runDispatch(false));
+      document.getElementById('generate').addEventListener('click', async () => {
+        generateSimulation();
+        setLiveState('Dispatching…', true);
+        await runDispatch(false);
+        setLiveState('Simulation complete', true);
+      });
+      clearMap();
+      loadDefaults();
+    </script>
+  </body>
+</html>

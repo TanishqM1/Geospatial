@@ -1,0 +1,221 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>VRP Demo</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      body { font-family: system-ui, Arial; max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+      .row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+      #map { height: 540px; border: 1px solid #ddd; border-radius: 10px; }
+      .panel { border: 1px solid #ddd; border-radius: 10px; padding: 12px; background: #fafafa; }
+      .actions { display: flex; gap: 8px; margin-bottom: 12px; }
+      button { padding: 8px 12px; border-radius: 8px; border: 1px solid #ccc; background: white; cursor: pointer; }
+      .input-locations { margin-bottom: 14px; }
+      .editable-grid { display: grid; gap: 10px; margin-top: 10px; }
+      .location-card { border: 1px solid #ddd; border-radius: 10px; background: #fff; padding: 10px; }
+      .location-card header { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 8px; }
+      .location-card header strong { font-size: 14px; }
+      .location-card .fields { display: grid; grid-template-columns: 1.2fr 1.5fr 1fr 1fr; gap: 8px; }
+      .location-card label { display: flex; flex-direction: column; font-size: 11px; color: #555; }
+      .location-card input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 8px; font-size: 13px; }
+      .chip { display: inline-block; padding: 2px 6px; border: 1px solid #bbb; border-radius: 999px; font-size: 11px; margin-right: 6px; }
+      ol { margin: 8px 0 0 22px; }
+      li { margin-bottom: 8px; }
+      code { font-size: 12px; }
+      .muted { color: #555; font-size: 13px; }
+      @media (max-width: 900px) {
+        .row { grid-template-columns: 1fr; }
+        #map { height: 420px; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>VRP Demo (OR-Tools + Geospatial Backend)</h1>
+    <p class="muted">Solves a round trip through 5 BC points, then proxies each leg route from your Geospatial backend.</p>
+
+    <div class="panel input-locations">
+      <h3>Locations Going Into VRP</h3>
+      <div class="muted">These defaults are loaded from the sidecar and can be edited before solving.</div>
+      <div id="input-locations-list" class="editable-grid"></div>
+    </div>
+
+    <div class="actions" style="margin-top: 12px; margin-bottom: 14px;">
+      <button id="solve">Solve + Draw Route</button>
+    </div>
+
+    <div class="row">
+      <div id="map"></div>
+      <div class="panel">
+        <h3>Traversal Order</h3>
+        <div id="summary" class="muted">Click "Solve + Draw Route"</div>
+        <ol id="order"></ol>
+        <h3>Raw Response</h3>
+        <pre id="out" style="max-height:200px; overflow:auto;"></pre>
+      </div>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      const map = L.map("map").setView([49.25, -123.1], 8);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+
+      let layers = [];
+
+      function clearLayers() {
+        layers.forEach((layer) => map.removeLayer(layer));
+        layers = [];
+      }
+
+      function fmtCoord(coord) {
+        return `(${coord[1].toFixed(4)}, ${coord[0].toFixed(4)})`;
+      }
+
+      function renderInputLocations(points) {
+        const listEl = document.getElementById("input-locations-list");
+        listEl.innerHTML = "";
+
+        points.forEach((point) => {
+          const card = document.createElement("div");
+          card.className = "location-card";
+          card.dataset.index = String(point.index);
+          const tag = point.is_start ? "START / DEPOT" : `STOP ${point.index}`;
+          card.innerHTML = `
+            <header>
+              <div><span class="chip">${tag}</span><strong>Editable input</strong></div>
+              <span class="muted">Loaded default</span>
+            </header>
+            <div class="fields">
+              <label>Name <input data-field="name" value="${point.name}" /></label>
+              <label>Landmark <input data-field="landmark" value="${point.landmark}" /></label>
+              <label>Longitude <input data-field="lon" value="${point.coordinate[0]}" /></label>
+              <label>Latitude <input data-field="lat" value="${point.coordinate[1]}" /></label>
+            </div>
+          `;
+          listEl.appendChild(card);
+        });
+      }
+
+      function collectInputLocations() {
+        return [...document.querySelectorAll('.location-card')].map((card, index) => {
+          const get = (field) => card.querySelector(`[data-field="${field}"]`).value.trim();
+          return {
+            index,
+            name: get('name'),
+            landmark: get('landmark'),
+            coordinate: [Number(get('lon')), Number(get('lat'))],
+          };
+        });
+      }
+
+      function renderOrder(traversal) {
+        const orderEl = document.getElementById("order");
+        orderEl.innerHTML = "";
+        traversal.forEach((step, i) => {
+          const li = document.createElement("li");
+          const tag = step.is_start
+            ? "START"
+            : step.is_return_to_start
+              ? "RETURN"
+              : `STOP ${i}`;
+          li.innerHTML = `<strong>${tag}</strong> - ${step.name}<br/><code>${fmtCoord(step.coordinate)}</code>`;
+          orderEl.appendChild(li);
+        });
+      }
+
+      function drawMarkers(traversal) {
+        traversal.forEach((step, i) => {
+          const [lon, lat] = step.coordinate;
+          const marker = L.marker([lat, lon]).addTo(map);
+          marker.bindPopup(`${i}. ${step.name}<br/>${fmtCoord(step.coordinate)}`);
+          layers.push(marker);
+        });
+      }
+
+      function drawLegs(legs) {
+        legs.forEach((leg, i) => {
+          const route = leg.route || {};
+          const geom = route.geometry && route.geometry.coordinates ? route.geometry : null;
+          if (!geom) return;
+
+          const latLngs = geom.coordinates.map(([lon, lat]) => [lat, lon]);
+          const line = L.polyline(latLngs, {
+            color: "#1d4ed8",
+            weight: 4,
+            opacity: 0.85
+          }).addTo(map);
+          line.bindPopup(`Leg ${i + 1}: ${leg.from_index} → ${leg.to_index}`);
+          layers.push(line);
+        });
+      }
+
+      async function solve() {
+        document.getElementById("summary").textContent = "Solving...";
+        document.getElementById("out").textContent = "";
+        clearLayers();
+
+        const editablePoints = collectInputLocations();
+
+        const res = await fetch("/solve/tsp_with_routes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            metric: "duration",
+            coordinates: editablePoints.map((point) => point.coordinate),
+            names: editablePoints.map((point) => `${point.name} (${point.landmark})`),
+          })
+        });
+
+        const data = await res.json();
+        document.getElementById("out").textContent = JSON.stringify(data, null, 2);
+
+        if (!res.ok) {
+          document.getElementById("summary").textContent = `Error: ${data.detail || "Unknown error"}`;
+          return;
+        }
+
+        renderOrder(data.traversal || []);
+        drawMarkers(data.traversal || []);
+        drawLegs(data.legs || []);
+
+        const value = data.total_metric ? Number(data.total_metric).toFixed(0) : "n/a";
+        const unit = data.metric === "duration" ? "seconds" : "meters";
+        document.getElementById("summary").textContent =
+          `Start: ${data.traversal?.[0]?.name || "Depot"} | Total ${data.metric}: ${value} ${unit}`;
+
+        if (layers.length > 0) {
+          const group = L.featureGroup(layers);
+          map.fitBounds(group.getBounds().pad(0.2));
+        }
+      }
+
+      async function loadDefaults() {
+        try {
+          const res = await fetch("/defaults");
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || "Failed to load defaults");
+          renderInputLocations(data.points || []);
+        } catch (err) {
+          const listEl = document.getElementById("input-locations-list");
+          listEl.innerHTML = `<li>Could not load defaults: ${err.message || err}</li>`;
+        }
+      }
+
+      document.getElementById("solve").addEventListener("click", solve);
+      loadDefaults();
+    </script>
+  </body>
+</html>
